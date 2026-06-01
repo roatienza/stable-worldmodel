@@ -296,19 +296,18 @@ class SimpleWorldModel(nn.Module):
             dict with 'emb' (state embeddings) and 'act_emb' (action embeddings)
         """
         pixels = info["pixels"].float()
-        # Handle channels-last format (B, H, W, C) -> (B, C, H, W)
-        # PyTorch Conv2d expects (B, C, H, W) but env data often comes as (B, H, W, C)
+        # Ensure (B, C, H, W) format for PyTorch Conv2d
+        # Env data often comes as (B, H, W, C) - detect and convert
         if pixels.ndim == 4:
-            if pixels.shape[-1] == 3 and pixels.shape[1] != 3:
+            if pixels.shape[-1] == 3:
                 # (B, H, W, C) -> (B, C, H, W)
                 pixels = pixels.permute(0, 3, 1, 2)
-            elif pixels.shape[1] == 3 and pixels.shape[-1] != 3:
-                # Already (B, C, H, W) - no change needed
-                pass
-            else:
-                # Fallback: if last dim is 3, assume (B, H, W, C)
-                if pixels.shape[-1] == 3:
-                    pixels = pixels.permute(0, 3, 1, 2)
+            # If pixels.shape[1] == 3, already (B, C, H, W) - no change
+        elif pixels.ndim == 5:
+            if pixels.shape[-1] == 3:
+                # (B, T, H, W, C) -> (B, T, C, H, W)
+                pixels = pixels.permute(0, 1, 4, 2, 3)
+            # If pixels.shape[2] == 3, already (B, T, C, H, W) - no change
         emb = self.encoder(pixels)
         info["emb"] = emb
 
