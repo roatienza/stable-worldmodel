@@ -562,8 +562,51 @@ def evaluate_with_mpc(world_model, num_eval_episodes=10, horizon=10, num_samples
     )
 
     # Set policy and evaluate
+    # We use a custom evaluation loop instead of world.evaluate() to ensure
+    # world.infos is populated before each planning call. The library's
+    # _run() method does not call self.reset() before entering the rollout
+    # loop, which can leave self.infos empty and cause CEMSolver.solve() to
+    # raise StopIteration when it does:
+    #     total_envs = len(next(iter(info_dict.values())))
     world.set_policy(policy)
-    results = world.evaluate(episodes=num_eval_episodes)
+
+    # --- Custom evaluation loop ---
+    # Resets before each episode so world.infos is always populated when
+    # WorldModelPolicy.get_action() → CEMSolver.solve() is called.
+    successes = 0
+    episode_rewards = []
+
+    for ep in range(num_eval_episodes):
+        world.reset(seed=42 + ep)
+        episode_reward = 0.0
+        done = False
+
+        while not done:
+            # Get action from the MPC policy
+            action = world.policy.get_action(world.infos)
+            # Step the environment
+            _, reward, terminated, truncated, world.infos = world.envs.step(action)
+            episode_reward += reward
+            done = bool(terminated or truncated)
+
+        if terminated:
+            successes += 1
+        episode_rewards.append(episode_reward)
+
+        print(f"  Episode {ep + 1}/{num_eval_episodes} - "
+              f"Reward: {episode_reward:.2f}, "
+              f"Success: {bool(terminated)}")
+
+    success_rate = successes / num_eval_episodes * 100.0
+    mean_reward = float(np.mean(episode_rewards))
+    max_reward = float(np.max(episode_rewards))
+
+    results = {
+        "success_rate": success_rate,
+        "mean_reward": mean_reward,
+        "max_reward": max_reward,
+        "episode_rewards": episode_rewards,
+    }
 
     print(f"\n{'='*50}")
     print(f"Evaluation Results ({num_eval_episodes} episodes):")
@@ -609,6 +652,14 @@ def load_and_train(input_path="data/pusht_demo.lance", num_epochs=5, batch_size=
     print("\n" + "=" * 50)
     print("STAGE 2: World Model Training")
     print("=" * 50)
+
+    # Resolve to absolute path so the library finds it locally instead of trying HuggingFace
+    input_path = os.path.abspath(input_path)
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(
+            f"Dataset not found at {input_path}. "
+            "Run --collect first or provide a valid path with --input."
+        )
 
     # Load dataset
     dataset = swm.data.load_dataset(input_path, num_steps=16)
