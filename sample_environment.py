@@ -296,6 +296,10 @@ class SimpleWorldModel(nn.Module):
             dict with 'emb' (state embeddings) and 'act_emb' (action embeddings)
         """
         pixels = info["pixels"].float()
+        # Handle channels-last format (B, H, W, C) -> (B, C, H, W)
+        # This can happen when goal pixels come from the environment in CHW vs HWC format
+        if pixels.ndim == 4 and pixels.shape[-1] == 3 and pixels.shape[1] != 3:
+            pixels = rearrange(pixels, "b h w c -> b c h w")
         emb = self.encoder(pixels)
         info["emb"] = emb
 
