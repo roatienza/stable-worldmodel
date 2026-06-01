@@ -297,9 +297,18 @@ class SimpleWorldModel(nn.Module):
         """
         pixels = info["pixels"].float()
         # Handle channels-last format (B, H, W, C) -> (B, C, H, W)
-        # This can happen when goal pixels come from the environment in CHW vs HWC format
-        if pixels.ndim == 4 and pixels.shape[-1] == 3 and pixels.shape[1] != 3:
-            pixels = rearrange(pixels, "b h w c -> b c h w")
+        # PyTorch Conv2d expects (B, C, H, W) but env data often comes as (B, H, W, C)
+        if pixels.ndim == 4:
+            if pixels.shape[-1] == 3 and pixels.shape[1] != 3:
+                # (B, H, W, C) -> (B, C, H, W)
+                pixels = pixels.permute(0, 3, 1, 2)
+            elif pixels.shape[1] == 3 and pixels.shape[-1] != 3:
+                # Already (B, C, H, W) - no change needed
+                pass
+            else:
+                # Fallback: if last dim is 3, assume (B, H, W, C)
+                if pixels.shape[-1] == 3:
+                    pixels = pixels.permute(0, 3, 1, 2)
         emb = self.encoder(pixels)
         info["emb"] = emb
 
