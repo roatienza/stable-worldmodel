@@ -38,9 +38,16 @@ class PushTExpertPolicy(BasePolicy):
     considering the object's current position.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, seed=None, **kwargs):
         super().__init__(**kwargs)
         self.type = "pusht_expert"
+        self.seed = seed
+        self._rng = np.random.RandomState(seed)
+
+    def set_seed(self, seed):
+        """Set the random seed for reproducibility."""
+        self.seed = seed
+        self._rng = np.random.RandomState(seed)
 
     def get_action(self, obs, **kwargs):
         """
@@ -74,6 +81,11 @@ class RandomExpertPolicy(BasePolicy):
     def __init__(self, seed=None, **kwargs):
         super().__init__(**kwargs)
         self.type = "random"
+        self.seed = seed
+        self._rng = np.random.RandomState(seed)
+
+    def set_seed(self, seed):
+        """Set the random seed for reproducibility."""
         self.seed = seed
         self._rng = np.random.RandomState(seed)
 
