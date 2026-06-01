@@ -592,7 +592,7 @@ def collect_data(output_path="data/pusht_demo.lance", num_episodes=10):
     return output_path
 
 
-def load_and_train(input_path="data/pusht_demo.lance", num_epochs=5):
+def load_and_train(input_path="data/pusht_demo.lance", num_epochs=5, batch_size=32, lr=1e-4):
     """Stage 2: Load dataset and train world model."""
     print("\n" + "=" * 50)
     print("STAGE 2: World Model Training")
@@ -618,14 +618,14 @@ def load_and_train(input_path="data/pusht_demo.lance", num_epochs=5):
         world_model,
         dataset,
         num_epochs=num_epochs,
-        batch_size=32,
-        lr=1e-4,
+        batch_size=batch_size,
+        lr=lr,
     )
 
     return world_model
 
 
-def evaluate(world_model, num_episodes=10):
+def evaluate(world_model, num_episodes=10, horizon=10, num_samples=200):
     """Stage 3: Evaluate with MPC."""
     print("\n" + "=" * 50)
     print("STAGE 3: Evaluation with MPC")
@@ -634,39 +634,192 @@ def evaluate(world_model, num_episodes=10):
     results = evaluate_with_mpc(
         world_model,
         num_eval_episodes=num_episodes,
-        horizon=10,
-        num_samples=200,
+        horizon=horizon,
+        num_samples=num_samples,
     )
     return results
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="stable-worldmodel Sample Environment — Quick Start Demo",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run all three stages end-to-end
+  python sample_environment.py --all
+
+  # Run only data collection
+  python sample_environment.py --collect --episodes 20
+
+  # Train a world model on existing data
+  python sample_environment.py --train --input data/pusht_demo.lance --epochs 10
+
+  # Evaluate a trained model (requires --save-model from training first)
+  python sample_environment.py --evaluate --model-checkpoint models/world_model.pt --eval-episodes 10
+
+  # Collect + Train in one command
+  python sample_environment.py --collect --train --episodes 10 --epochs 5
+        """,
+    )
+
+    # Stage selection (mutually exclusive groups not needed — all flags are optional)
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Run all three stages: collect → train → evaluate",
+    )
+    parser.add_argument(
+        "--collect",
+        action="store_true",
+        help="Stage 1: Collect demonstration data",
+    )
+    parser.add_argument(
+        "--train",
+        action="store_true",
+        help="Stage 2: Train world model",
+    )
+    parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Stage 3: Evaluate with MPC",
+    )
+
+    # Stage 1 options
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=10,
+        help="Number of episodes for data collection (default: 10)",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="data/pusht_demo.lance",
+        help="Output path for collected dataset (default: data/pusht_demo.lance)",
+    )
+
+    # Stage 2 options
+    parser.add_argument(
+        "--input",
+        type=str,
+        default="data/pusht_demo.lance",
+        help="Input dataset path for training (default: data/pusht_demo.lance)",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=5,
+        help="Number of training epochs (default: 5)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+        help="Batch size for training (default: 32)",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=1e-4,
+        help="Learning rate (default: 1e-4)",
+    )
+    parser.add_argument(
+        "--save-model",
+        action="store_true",
+        help="Save trained model checkpoint after training",
+    )
+    parser.add_argument(
+        "--model-checkpoint",
+        type=str,
+        default="models/world_model.pt",
+        help="Path to save/load model checkpoint (default: models/world_model.pt)",
+    )
+
+    # Stage 3 options
+    parser.add_argument(
+        "--eval-episodes",
+        type=int,
+        default=10,
+        help="Number of evaluation episodes (default: 10)",
+    )
+    parser.add_argument(
+        "--horizon",
+        type=int,
+        default=10,
+        help="Planning horizon for MPC (default: 10)",
+    )
+    parser.add_argument(
+        "--num-samples",
+        type=int,
+        default=200,
+        help="Number of CEM samples (default: 200)",
+    )
+
+    args = parser.parse_args()
+
+    # If no flags given, print help
+    if not any([args.all, args.collect, args.train, args.evaluate]):
+        parser.print_help()
+        exit(0)
+
+    # --all implies all three stages
+    if args.all:
+        args.collect = True
+        args.train = True
+        args.evaluate = True
+
     print("=" * 50)
     print("stable-worldmodel Sample Environment")
     print("=" * 50)
-    print("\nThis sample demonstrates the full world model pipeline:")
-    print("  1. Data collection with expert policy")
-    print("  2. World model training (JEPA-style)")
-    print("  3. Evaluation with model-predictive control")
-    print("\nUncomment the stages you want to run below.")
+
+    data_path = None
+    world_model = None
 
     # Stage 1: Collect data
-    # Uncomment to collect demonstration data
-    # data_path = collect_data(num_episodes=10)
+    if args.collect:
+        data_path = collect_data(output_path=args.output, num_episodes=args.episodes)
 
     # Stage 2: Train world model
-    # Uncomment after collecting data
-    # world_model = load_and_train(input_path=data_path, num_epochs=5)
+    if args.train:
+        input_path = args.input if args.input != "data/pusht_demo.lance" else (data_path or args.input)
+        world_model = load_and_train(
+            input_path=input_path,
+            num_epochs=args.epochs,
+            batch_size=args.batch_size,
+            lr=args.lr,
+        )
+        # Save model checkpoint if requested
+        if args.save_model:
+            os.makedirs("models", exist_ok=True)
+            torch.save(world_model.state_dict(), args.model_checkpoint)
+            print(f"\nModel saved to {args.model_checkpoint}")
 
     # Stage 3: Evaluate with MPC
-    # Uncomment after training
-    # evaluate(world_model, num_episodes=10)
+    if args.evaluate:
+        if world_model is None:
+            # Try to load a saved checkpoint
+            if os.path.isfile(args.model_checkpoint):
+                print(f"\nLoading model from {args.model_checkpoint}...")
+                world_model = SimpleWorldModel(
+                    input_channels=3,
+                    img_size=64,
+                    embed_dim=768,
+                    action_dim=2,
+                    num_frames=3,
+                    predictor_heads=8,
+                    predictor_layers=4,
+                )
+                world_model.load_state_dict(torch.load(args.model_checkpoint, map_location="cpu"))
+            else:
+                print(f"\nError: No model available. Train first or provide --model-checkpoint.")
+                print(f"  Expected: {args.model_checkpoint}")
+                exit(1)
+
+        evaluate(world_model, num_episodes=args.eval_episodes)
 
     print("\n" + "=" * 50)
-    print("Sample environment ready!")
+    print("Done!")
     print("=" * 50)
-    print("\nTo run the full pipeline:")
-    print("  1. Uncomment the function calls above")
-    print("  2. Run: python sample_environment.py")
-    print("\nFor a quick test with random data collection:")
-    print("  python -c \"from sample_environment import collect_data; collect_data(num_episodes=5)\"")
