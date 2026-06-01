@@ -525,7 +525,7 @@ def evaluate_with_mpc(world_model, num_eval_episodes=10, horizon=10, num_samples
     world_model = world_model.to(device)
 
     # Create environment
-    world = swm.World("swm/PushT-v1", num_envs=1)
+    world = swm.World("swm/PushT-v1", num_envs=1, image_shape=(64, 64))
 
     # Create CEM solver
     solver = CEMSolver(
@@ -576,7 +576,7 @@ def collect_data(output_path="data/pusht_demo.lance", num_episodes=10):
     print("=" * 50)
 
     # Create world with PushT environment
-    world = swm.World("swm/PushT-v1", num_envs=4)
+    world = swm.World("swm/PushT-v1", num_envs=4, image_shape=(64, 64))
 
     # Set expert policy (using random policy for demonstration)
     # Replace with PushTExpertPolicy() for a heuristic policy
