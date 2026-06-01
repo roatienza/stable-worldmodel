@@ -606,7 +606,7 @@ def evaluate_with_mpc(world_model, num_eval_episodes=10, horizon=10, num_samples
         episode_rewards.append(episode_reward)
 
         print(f"  Episode {ep + 1}/{num_eval_episodes} - "
-              f"Reward: {episode_reward:.2f}, "
+              f"Reward: {float(episode_reward):.2f}, "
               f"Success: {bool(terminated)}")
 
     success_rate = successes / num_eval_episodes * 100.0
